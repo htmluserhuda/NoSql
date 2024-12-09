@@ -1,5 +1,7 @@
+
 import tkinter as tk
 from tkinter import ttk
+from tkinter import messagebox
 from pymongo import MongoClient
 from datetime import datetime
 from bson.objectid import ObjectId
@@ -16,9 +18,120 @@ class NotesApp:
         self.client = MongoClient("mongodb://localhost:27017/")
         self.db = self.client["notes_app"]
         self.notes_collection = self.db["notes"]
+        self.users_collection = self.db["users"]
 
+        self.current_user = None  # To store the logged-in user
         self.additional_properties = {}  # Store custom properties
-        self.initialize_main_page()
+
+        self.initialize_welcome_page()
+
+    def initialize_welcome_page(self):
+        # Clear frame
+        for widget in self.root.winfo_children():
+            widget.destroy()
+
+        # Welcome Title
+        title = tk.Label(self.root, text="Welcome to Notes App", font=("Helvetica", 18), bg="#1A1A1A", fg="#00FFCC")
+        title.pack(pady=30)
+
+        # Signup Button
+        signup_button = tk.Button(self.root, text="Sign Up", bg="#00FFCC", fg="#1A1A1A", font=("Helvetica", 14),
+                                   command=self.initialize_signup_page)
+        signup_button.pack(pady=10)
+
+        # Login Button
+        login_button = tk.Button(self.root, text="Login", bg="#F2A900", fg="#1A1A1A", font=("Helvetica", 14),
+                                  command=self.initialize_login_page)
+        login_button.pack(pady=10)
+
+    def initialize_signup_page(self):
+        # Clear frame
+        for widget in self.root.winfo_children():
+            widget.destroy()
+
+        # Signup Title
+        tk.Label(self.root, text="Sign Up", font=("Helvetica", 18), bg="#1A1A1A", fg="#00FFCC").pack(pady=20)
+
+        # Fields
+        tk.Label(self.root, text="Username", bg="#1A1A1A", fg="#FFFFFF").pack(anchor="w", padx=20)
+        username_entry = tk.Entry(self.root, font=("Helvetica", 14))
+        username_entry.pack(fill="x", padx=20)
+
+        tk.Label(self.root, text="Email", bg="#1A1A1A", fg="#FFFFFF").pack(anchor="w", padx=20)
+        email_entry = tk.Entry(self.root, font=("Helvetica", 14))
+        email_entry.pack(fill="x", padx=20)
+
+        tk.Label(self.root, text="Password", bg="#1A1A1A", fg="#FFFFFF").pack(anchor="w", padx=20)
+        password_entry = tk.Entry(self.root, font=("Helvetica", 14), show="*")
+        password_entry.pack(fill="x", padx=20)
+
+        tk.Label(self.root, text="Confirm Password", bg="#1A1A1A", fg="#FFFFFF").pack(anchor="w", padx=20)
+        confirm_password_entry = tk.Entry(self.root, font=("Helvetica", 14), show="*")
+        confirm_password_entry.pack(fill="x", padx=20)
+
+        # Sign Up Button
+        tk.Button(self.root, text="Sign Up", bg="#00FFCC", fg="#1A1A1A", font=("Helvetica", 14),
+                  command=lambda: self.signup_user(
+                      username_entry.get(),
+                      email_entry.get(),
+                      password_entry.get(),
+                      confirm_password_entry.get()
+                  )).pack(pady=20)
+
+        # Back Button
+        tk.Button(self.root, text="Back", bg="#F2A900", fg="#1A1A1A", font=("Helvetica", 14),
+                  command=self.initialize_welcome_page).pack(pady=10)
+
+    def signup_user(self, username, email, password, confirm_password):
+        if not username or not email or not password:
+            messagebox.showerror("Error", "All fields are required!")
+            return
+
+        if password != confirm_password:
+            messagebox.showerror("Error", "Passwords do not match!")
+            return
+
+        # Save to MongoDB
+        if self.users_collection.find_one({"email": email}):
+            messagebox.showerror("Error", "Email already exists!")
+        else:
+            self.users_collection.insert_one({"username": username, "email": email, "password": password})
+            messagebox.showinfo("Success", "User registered successfully!")
+            self.current_user = email
+            self.initialize_main_page()
+
+    def initialize_login_page(self):
+        # Clear frame
+        for widget in self.root.winfo_children():
+            widget.destroy()
+
+        # Login Title
+        tk.Label(self.root, text="Login", font=("Helvetica", 18), bg="#1A1A1A", fg="#00FFCC").pack(pady=20)
+
+        # Fields
+        tk.Label(self.root, text="Email", bg="#1A1A1A", fg="#FFFFFF").pack(anchor="w", padx=20)
+        email_entry = tk.Entry(self.root, font=("Helvetica", 14))
+        email_entry.pack(fill="x", padx=20)
+
+        tk.Label(self.root, text="Password", bg="#1A1A1A", fg="#FFFFFF").pack(anchor="w", padx=20)
+        password_entry = tk.Entry(self.root, font=("Helvetica", 14), show="*")
+        password_entry.pack(fill="x", padx=20)
+
+        # Login Button
+        tk.Button(self.root, text="Login", bg="#00FFCC", fg="#1A1A1A", font=("Helvetica", 14),
+                  command=lambda: self.login_user(email_entry.get(), password_entry.get())).pack(pady=20)
+
+        # Back Button
+        tk.Button(self.root, text="Back", bg="#F2A900", fg="#1A1A1A", font=("Helvetica", 14),
+                  command=self.initialize_welcome_page).pack(pady=10)
+
+    def login_user(self, email, password):
+        user = self.users_collection.find_one({"email": email, "password": password})
+        if user:
+            self.current_user = email
+            self.initialize_main_page()
+        else:
+            messagebox.showerror("Error", "Invalid email or password!")
 
     def initialize_main_page(self):
         # Clear frame
@@ -58,7 +171,7 @@ class NotesApp:
         add_button = tk.Button(self.root, text="+", bg="#00FFCC", fg="#1A1A1A", font=("Helvetica", 18),
                                command=self.initialize_add_note_page)
         add_button.pack(side="bottom", pady=10)
-
+        
     def initialize_add_note_page(self):
         # Clear frame
         for widget in self.root.winfo_children():
@@ -188,6 +301,9 @@ class NotesApp:
         print(f"Note with ID {note_id} updated!")  # Debugging message
         window.destroy()  # Close the edit window
         self.initialize_main_page()  # Refresh the notes list
+
+
+
 
 
 if __name__ == "__main__":
