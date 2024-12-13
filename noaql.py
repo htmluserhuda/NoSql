@@ -91,14 +91,16 @@ class NotesApp:
             messagebox.showerror("Error", "Passwords do not match!")
             return
 
-        # Save to MongoDB
+    # Save to MongoDB
         if self.users_collection.find_one({"email": email}):
             messagebox.showerror("Error", "Email already exists!")
         else:
-            self.users_collection.insert_one({"username": username, "email": email, "password": password})
+            user_id = self.users_collection.insert_one({"username": username, "email": email, "password": password}).inserted_id
+            self.current_user = self.users_collection.find_one({"_id": user_id})  # Save the user document in memory
             messagebox.showinfo("Success", "User registered successfully!")
-            self.current_user = email
             self.initialize_main_page()
+
+
 
     def initialize_login_page(self):
         # Clear frame
@@ -128,22 +130,23 @@ class NotesApp:
     def login_user(self, email, password):
         user = self.users_collection.find_one({"email": email, "password": password})
         if user:
-            self.current_user = email
+            self.current_user = user  # Save the user document in memory
             self.initialize_main_page()
         else:
             messagebox.showerror("Error", "Invalid email or password!")
 
+
     def initialize_main_page(self):
-        # Clear frame
+    # Clear frame
         for widget in self.root.winfo_children():
             widget.destroy()
 
-        # Title
+    # Title
         title = tk.Label(self.root, text="Notes", font=("Helvetica", 24), bg="#1A1A1A", fg="#FFFFFF")
         title.pack(pady=20)
 
-        # Notes list
-        notes = self.notes_collection.find()  # Fetch notes from MongoDB
+    # Fetch notes for the logged-in user
+        notes = self.notes_collection.find({"user_id": self.current_user["_id"]})
         for note in notes:
             note_frame = tk.Frame(self.root, bg="#F2A900", height=80, bd=5, relief=tk.RIDGE)
             note_frame.pack(fill="x", padx=10, pady=5)
@@ -153,24 +156,20 @@ class NotesApp:
             tk.Label(note_frame, text=note["content"], font=("Helvetica", 10), bg="#F2A900", fg="#1A1A1A").pack(anchor="w")
             tk.Label(note_frame, text=note["date"], font=("Helvetica", 8), bg="#F2A900", fg="#1A1A1A").pack(anchor="e")
 
-            # Display additional properties if any
-            for key, value in note.get("properties", {}).items():
-                tk.Label(note_frame, text=f"{key}: {value}", font=("Helvetica", 10), bg="#F2A900", fg="#1A1A1A").pack(anchor="w")
-
-            # Add Remove Button
+            # Add Remove and Edit Buttons
             remove_button = tk.Button(note_frame, text="Remove", bg="#FF4C4C", fg="#FFFFFF",
-                                       command=lambda note_id=note["_id"]: self.remove_note(note_id))
+                                    command=lambda note_id=note["_id"]: self.remove_note(note_id))
             remove_button.pack(side="right", padx=5, pady=5)
 
-            # Add Edit Button
             edit_button = tk.Button(note_frame, text="Edit", bg="#00CCFF", fg="#FFFFFF",
-                                     command=lambda note=note: self.open_edit_note_window(note))
+                                    command=lambda note=note: self.open_edit_note_window(note))
             edit_button.pack(side="right", padx=5, pady=5)
 
         # Add button
         add_button = tk.Button(self.root, text="+", bg="#00FFCC", fg="#1A1A1A", font=("Helvetica", 18),
-                               command=self.initialize_add_note_page)
+                            command=self.initialize_add_note_page)
         add_button.pack(side="bottom", pady=10)
+
         
     def initialize_add_note_page(self):
         # Clear frame
@@ -236,16 +235,21 @@ class NotesApp:
             window.destroy()  # Close the property window
 
     def add_note(self, title, content):
-        if title and content:
-            note = {
-                "title": title,
-                "content": content,
-                "date": datetime.now().strftime("%b %d, %Y"),
-                "properties": self.additional_properties  # Include custom properties
-            }
-            self.notes_collection.insert_one(note)  # Save note to MongoDB
-        self.additional_properties = {}  # Reset properties for the next note
+        if not title or not content:
+            messagebox.showerror("Error", "Title and content cannot be empty!")
+            return
+
+        note = {
+            "title": title,
+            "content": content,
+            "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "user_id": self.current_user["_id"],  # Use the logged-in user's ID
+            "properties": self.additional_properties  # Add additional properties
+        }
+        self.notes_collection.insert_one(note)
+        messagebox.showinfo("Success", "Note added successfully!")
         self.initialize_main_page()
+
 
     def remove_note(self, note_id):
         # Remove note from MongoDB
